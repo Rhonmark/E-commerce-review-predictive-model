@@ -2,7 +2,7 @@ import pandas as pd
 from nltk.sentiment import SentimentIntensityAnalyzer
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, accuracy_score
+from sklearn.metrics import classification_report, accuracy_score, mean_absolute_error
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 import numpy as np
@@ -65,7 +65,7 @@ sentiments.loc[
 ] = 0 #less likely to buy again
 
 sentiments.loc[
-  (sentiments['sentiment_score'].between(-0.05, 0.05)) & (sentiments['ratings'] == 3),
+  (sentiments['sentiment_score'].between(-1.75, 1.75)) & (sentiments['ratings'] == 3),
   'repeat_buy'
 ] = 2 #50/50
 # print(sentiments)
@@ -95,6 +95,7 @@ regression.fit(x_train_scaler, y_train)
 y_result = regression.predict(x_test_scaler)
 print("Accuracy: ", accuracy_score(y_test, y_result))
 print(classification_report(y_test, y_result, zero_division=0))
+print("Mean Absolute Error: ", mean_absolute_error(y_test, y_result))
 
 # print(regression.coef_[0])
 
@@ -127,7 +128,7 @@ for _ in range(simulations):
 print("Sample Monte Carlo Results (first 10):")
 for i in range(10):
     sentiment, rating, result = simulated_results[i]
-    label = {0: "Less likely to buy again", 1: "Likely to buy again"}[result]
+    label = {0: "Less likely to buy again", 1: "Likely to buy again", 2: "Unsure Buyer"}[result]
     print(f"Sentiment: {sentiment:.2f}, Rating: {rating}, Prediction: {label}")
 
 count_0 = sum(1 for _, _, r in simulated_results if r == 0)
@@ -175,7 +176,7 @@ sns.scatterplot(
     x='sentiment_score',
     y='rating',
     hue='repeat_buy',
-    palette={0: 'red', 1: 'green'},
+    palette={0: 'red', 1: 'blue', 2: 'black'},
     alpha=0.6,
     edgecolor='black'
 )
