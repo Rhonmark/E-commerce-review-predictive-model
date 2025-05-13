@@ -109,36 +109,94 @@ print(f"Accuracy of the model: {accuracy:.2%}")
 
 print("\n--- Monte Carlo Simulation ---")
 
-simulations = 1000
-simulated_results = []
-
+simulations = 10000
 start = time.time()
 
-for _ in range(simulations):
-    random_sentiment = np.random.uniform(-1, 1)
-    random_rating = np.random.randint(1, 6)     
+mc_results = []
 
-    sim_point = pd.DataFrame([[random_sentiment, random_rating]], columns=['sentiment_score', 'ratings'])
+original_coefficients = regression.coef_[0]
+original_intercept = regression.intercept_[0]
 
-    sim_point_scaled = scaler.transform(sim_point)
+coefficient_std = 0.1
+intercept_std = 0.1
 
-    prediction = regression.predict(sim_point_scaled)[0]
-    simulated_results.append((random_sentiment, random_rating, prediction))
+n_test_points = 500
+test_sentiments = np.random.uniform(-1, 1, n_test_points)
+test_ratings = np.random.randint(1, 6, n_test_points)
+test_data = pd.DataFrame({
+    'sentiment_score': test_sentiments,
+    'ratings': test_ratings
+})
+test_data_scaled = scaler.transform(test_data)
 
-print("Sample Monte Carlo Results (first 10):")
-for i in range(10):
-    sentiment, rating, result = simulated_results[i]
-    label = {0: "Less likely to buy again", 1: "Likely to buy again", 2: "Unsure Buyer"}[result]
-    print(f"Sentiment: {sentiment:.2f}, Rating: {rating}, Prediction: {label}")
+all_predictions = np.zeros((simulations, n_test_points))
 
-count_0 = sum(1 for _, _, r in simulated_results if r == 0)
-count_1 = sum(1 for _, _, r in simulated_results if r == 1)
-count_2 = sum(1 for _, _, r in simulated_results if r == 2)
+for sim in range(simulations):
+    sampled_coefficients = np.random.normal(
+        original_coefficients, 
+        coefficient_std, 
+        size=original_coefficients.shape
+    )
+    sampled_intercept = np.random.normal(
+        original_intercept, 
+        intercept_std
+    )
+  
+    mc_model = LogisticRegression()
+    mc_model.classes_ = regression.classes_
+    mc_model.coef_ = np.array([sampled_coefficients])
+    mc_model.intercept_ = np.array([sampled_intercept])
+    
+    predictions = mc_model.predict(test_data_scaled)
+    all_predictions[sim] = predictions
+    
+    if sim < 10:
+        for i in range(3):
+            mc_results.append({
+                'simulation': sim,
+                'sentiment_score': test_data.iloc[i]['sentiment_score'],
+                'rating': test_data.iloc[i]['ratings'],
+                'prediction': predictions[i]
+            })
 
-print("\nSimulation Summary:")
-print(f"Less likely to buy again: {count_0}")
-print(f"Likely to buy again: {count_1}")
-# print(f"50/50: {count_2}")
+end = time.time()
+
+results_df = pd.DataFrame(mc_results)
+
+print("\nSample Monte Carlo Results:")
+for i in range(min(10, len(results_df))):
+    sim = results_df.iloc[i]['simulation']
+    sentiment = results_df.iloc[i]['sentiment_score']
+    rating = results_df.iloc[i]['rating']
+    prediction = results_df.iloc[i]['prediction']
+    label = {0: "Less likely to buy again", 1: "Likely to buy again", 2: "Unsure Buyer"}[prediction]
+    print(f"Simulation {sim}, Sentiment: {sentiment:.2f}, Rating: {rating}, Prediction: {label}")
+
+prob_class_0 = np.mean(all_predictions == 0, axis=0)
+prob_class_1 = np.mean(all_predictions == 1, axis=0)
+prob_class_2 = np.mean(all_predictions == 2, axis=0)
+
+test_data['prob_class_0'] = prob_class_0
+test_data['prob_class_1'] = prob_class_1
+test_data['prob_class_2'] = prob_class_2
+
+test_data['most_likely_class'] = test_data[['prob_class_0', 'prob_class_1', 'prob_class_2']].idxmax(axis=1)
+test_data['most_likely_class'] = test_data['most_likely_class'].map({
+    'prob_class_0': 0,
+    'prob_class_1': 1,
+    'prob_class_2': 2
+})
+
+test_data['uncertainty'] = -(
+    test_data['prob_class_0'] * np.log2(test_data['prob_class_0'] + 1e-10) +
+    test_data['prob_class_1'] * np.log2(test_data['prob_class_1'] + 1e-10) +
+    test_data['prob_class_2'] * np.log2(test_data['prob_class_2'] + 1e-10)
+)
+
+print("\nMonte Carlo Simulation Summary:")
+print(f"Less likely to buy again (Class 0): {np.sum(test_data['most_likely_class'] == 0)} points")
+print(f"Likely to buy again (Class 1): {np.sum(test_data['most_likely_class'] == 1)} points")
+print(f"Unsure Buyer (Class 2): {np.sum(test_data['most_likely_class'] == 2)} points")
 
 end = time.time()
 
@@ -164,25 +222,72 @@ plt.scatter(x_test['sentiment_score'], x_test['ratings'], c=y_test, edgecolors='
 plt.xlabel('Sentiment Score')
 plt.ylabel('Ratings')
 plt.title('Logistic Regression Decision Boundary')
-plt.colorbar(label='Repeat Buy (0 = No, 1 = Yes)')
+plt.colorbar(label='Repeat Buy (0 = No, 1 = Yes, 2 = Unsure)')
 plt.grid(True)
 plt.show()
 
-monte_carlo_df = pd.DataFrame(simulated_results, columns=['sentiment_score', 'rating', 'repeat_buy'])
-
-plt.figure(figsize=(10, 6))
-sns.scatterplot(
-    data=monte_carlo_df,
-    x='sentiment_score',
-    y='rating',
-    hue='repeat_buy',
-    palette={0: 'red', 1: 'blue', 2: 'black'},
+plt.figure(figsize=(12, 8))
+scatter = plt.scatter(
+    test_data['sentiment_score'],
+    test_data['ratings'],
+    c=test_data['most_likely_class'],
+    s=test_data['uncertainty'] * 100,
     alpha=0.6,
+    cmap=plt.cm.Paired,
     edgecolor='black'
 )
-plt.title('Monte Carlo Simulation Results')
+
 plt.xlabel('Sentiment Score')
 plt.ylabel('Rating')
-plt.legend(title='Repeat Buy (0 = No, 1 = Yes)')
+plt.title('Monte Carlo Logistic Regression Results with Uncertainty')
+plt.colorbar(scatter, label='Predicted Class')
 plt.grid(True)
+
+sizes = [0.2, 0.5, 1.0]
+labels = ['Low uncertainty', 'Medium uncertainty', 'High uncertainty']
+legend_elements = [plt.Line2D([0], [0], marker='o', color='w', 
+                             label=labels[i], 
+                             markerfacecolor='gray', 
+                             markersize=np.sqrt(sizes[i] * 100)) 
+                  for i in range(len(sizes))]
+plt.legend(handles=legend_elements, title='Prediction Uncertainty')
+
 plt.show()
+
+plt.figure(figsize=(10, 6))
+coefficient_samples = np.random.normal(
+    original_coefficients.reshape(-1, 1), 
+    coefficient_std, 
+    size=(len(original_coefficients), 1000)
+)
+
+feature_names = ['Sentiment Score', 'Ratings']
+for i, feature in enumerate(feature_names):
+    plt.subplot(len(feature_names), 1, i+1)
+    sns.histplot(coefficient_samples[i], kde=True)
+    plt.axvline(original_coefficients[i], color='r', linestyle='--')
+    plt.title(f'Distribution of {feature} Coefficient')
+    plt.xlabel('Coefficient Value')
+    plt.ylabel('Frequency')
+
+plt.tight_layout()
+plt.show()
+
+# monte_carlo_df = pd.DataFrame(simulated_results, columns=['sentiment_score', 'rating', 'repeat_buy'])
+
+# plt.figure(figsize=(10, 6))
+# sns.scatterplot(
+#     data=monte_carlo_df,
+#     x='sentiment_score',
+#     y='rating',
+#     hue='repeat_buy',
+#     palette={0: 'red', 1: 'blue', 2: 'black'},
+#     alpha=0.6,
+#     edgecolor='black'
+# )
+# plt.title('Monte Carlo Simulation Results')
+# plt.xlabel('Sentiment Score')
+# plt.ylabel('Rating')
+# plt.legend(title='Repeat Buy (0 = No, 1 = Yes)')
+# plt.grid(True)
+# plt.show()
