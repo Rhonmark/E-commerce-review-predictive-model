@@ -50,7 +50,6 @@ sentiments = pd.DataFrame({
   'ratings': pd.concat([amazon_reviews['overall'], shopee_reviews['rating'].head(5000), lazada_reviews['rating']], ignore_index=True)
 })
 
-# print(sentiments.shape)
 sentiments['repeat_buy'] = 0
 print(sentiments.info())
 
@@ -85,8 +84,6 @@ x_test_scaler = scaler.transform(x_test)
 
 regression = LogisticRegression(
   multi_class='multinomial',
-  # class_weight='balanced',
-  # max_iter=1000,
   solver='lbfgs'
 )
 
@@ -109,7 +106,7 @@ print(f"Accuracy of the model: {accuracy:.2%}")
 
 print("\n--- Monte Carlo Simulation ---")
 
-simulations = 10000
+simulations = 1000
 start = time.time()
 
 mc_results = []
@@ -120,7 +117,7 @@ original_intercept = regression.intercept_[0]
 coefficient_std = 0.1
 intercept_std = 0.1
 
-n_test_points = 500
+n_test_points = 200
 test_sentiments = np.random.uniform(-1, 1, n_test_points)
 test_ratings = np.random.randint(1, 6, n_test_points)
 test_data = pd.DataFrame({
@@ -130,7 +127,7 @@ test_data = pd.DataFrame({
 test_data_scaled = scaler.transform(test_data)
 
 all_predictions = np.zeros((simulations, n_test_points))
-
+  
 for sim in range(simulations):
     sampled_coefficients = np.random.normal(
         original_coefficients, 
@@ -249,7 +246,7 @@ legend_elements = [plt.Line2D([0], [0], marker='o', color='w',
                              label=labels[i], 
                              markerfacecolor='gray', 
                              markersize=np.sqrt(sizes[i] * 100)) 
-                  for i in range(len(sizes))]
+                  for i in range(len(sizes))] 
 plt.legend(handles=legend_elements, title='Prediction Uncertainty')
 
 plt.show()
@@ -264,7 +261,7 @@ coefficient_samples = np.random.normal(
 feature_names = ['Sentiment Score', 'Ratings']
 for i, feature in enumerate(feature_names):
     plt.subplot(len(feature_names), 1, i+1)
-    sns.histplot(coefficient_samples[i], kde=True)
+    sns.histplot(coefficient_samples[i], kde=True)  
     plt.axvline(original_coefficients[i], color='r', linestyle='--')
     plt.title(f'Distribution of {feature} Coefficient')
     plt.xlabel('Coefficient Value')
@@ -272,22 +269,3 @@ for i, feature in enumerate(feature_names):
 
 plt.tight_layout()
 plt.show()
-
-# monte_carlo_df = pd.DataFrame(simulated_results, columns=['sentiment_score', 'rating', 'repeat_buy'])
-
-# plt.figure(figsize=(10, 6))
-# sns.scatterplot(
-#     data=monte_carlo_df,
-#     x='sentiment_score',
-#     y='rating',
-#     hue='repeat_buy',
-#     palette={0: 'red', 1: 'blue', 2: 'black'},
-#     alpha=0.6,
-#     edgecolor='black'
-# )
-# plt.title('Monte Carlo Simulation Results')
-# plt.xlabel('Sentiment Score')
-# plt.ylabel('Rating')
-# plt.legend(title='Repeat Buy (0 = No, 1 = Yes)')
-# plt.grid(True)
-# plt.show()
